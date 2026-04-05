@@ -1641,6 +1641,10 @@ ngx_mail_auth_http_header(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     ngx_str_t        *value;
     ngx_table_elt_t  *header;
 
+    if (!ngx_conf_check_field_name_and_strip_value(cf)) {
+        return NGX_CONF_ERROR;
+    }
+
     if (ahcf->headers == NULL) {
         ahcf->headers = ngx_array_create(cf->pool, 1, sizeof(ngx_table_elt_t));
         if (ahcf->headers == NULL) {
