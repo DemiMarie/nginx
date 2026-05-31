@@ -16,8 +16,8 @@ ngx_int_t
 ngx_http_v23_validate_header(ngx_http_request_t *r,
     ngx_str_t *name, ngx_str_t *value, ngx_int_t is_client)
 {
+    u_char                    *end, *start;
     u_char                     ch;
-    ngx_str_t                  tmp;
     ngx_uint_t                 i;
     ngx_http_core_srv_conf_t  *cscf;
 
@@ -85,46 +85,25 @@ ngx_http_v23_validate_header(ngx_http_request_t *r,
         return NGX_OK;
     }
 
-    tmp = *value;
+    start = value->data;
+    end = value->data + value->len;
 
-    /*
-     * Strip trailing whitespace.  Do this first so that
-     * if the string is all whitespace, tmp.data is not a
-     * past-the-end pointer, which cannot be safely passed
-     * to memmove().  After the loop, the string is either
-     * empty or ends with a non-whitespace character.
-     */
-    while (tmp.len && ngx_isspace(tmp.data[tmp.len - 1])) {
-        tmp.len--;
+    while (start < end && ngx_isspace(*start)) {
+        start++;
     }
 
-    /* Strip leading whitespace */
-    if (tmp.len && ngx_isspace(tmp.data[0])) {
-        /*
-         * Last loop guaranteed that 'tmp' does not end with whitespace, and
-         * this check guarantees it is not empty and starts with whitespace.
-         * Therefore, 'tmp' must end with a non-whitespace character, and must
-         * be of length at least 2.  This means that it is safe to keep going
-         * until a non-whitespace character is found.
-         */
-        do {
-            tmp.len--;
-            tmp.data++;
-        } while (ngx_isspace(tmp.data[0]));
-
-        /* Move remaining string to start of buffer. */
-        memmove(value->data, tmp.data, tmp.len);
+    while (start < end && ngx_isspace(end[-1])) {
+        end--;
     }
 
-    /*
-     * NUL-pad the data, so that if it was NUL-terminated before, it stil is.
-     * At least one byte will have been stripped, so value->data + tmp.len
-     * is not a past-the-end pointer.
-     */
-    memset(value->data + tmp.len, '\0', value->len - tmp.len);
+    if (start == end) {
+        value->len = 0;
+        return NGX_OK;
+    }
 
-    /* Fix up length and return. */
-    value->len = tmp.len;
+    value->data = start;
+    value->len = end - start;
+
     return NGX_OK;
 }
 
