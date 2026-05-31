@@ -1452,7 +1452,7 @@ ngx_http_proxy_create_request(ngx_http_request_t *r)
         code((ngx_http_script_engine_t *) &e);
         tmp.len = (size_t)(e.pos - tmp.data);
         if (ngx_http_valid_header_name(tmp) != NGX_OK) {
-            ngx_log_error(NGX_LOG_ALERT, r->connection->log, 0,
+            ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
                           "Header name contains forbidden characters "
                           "(do you use header names with variables?)");
             return NGX_ERROR;
@@ -1468,7 +1468,7 @@ ngx_http_proxy_create_request(ngx_http_request_t *r)
         e.ip += sizeof(uintptr_t);
         tmp.len = (size_t)(e.pos - tmp.data);
         if (ngx_http_valid_header_value(tmp) != NGX_OK) {
-            ngx_log_error(NGX_LOG_ALERT, r->connection->log, 0,
+            ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
                           "Header value contains forbidden characters "
                           "(do you use variables in header values that "
                           "can contain CR or LF?)");
