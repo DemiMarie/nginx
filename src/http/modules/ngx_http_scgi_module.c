@@ -1070,8 +1070,10 @@ ngx_http_scgi_process_status_line(ngx_http_request_t *r)
 static ngx_int_t
 ngx_http_scgi_process_header(ngx_http_request_t *r)
 {
+    u_char                          ch;
     ngx_str_t                      *status_line;
     ngx_int_t                       rc, status;
+    ngx_uint_t                      i;
     ngx_table_elt_t                *h;
     ngx_http_upstream_t            *u;
     ngx_http_upstream_header_t     *hh;
@@ -1152,11 +1154,30 @@ ngx_http_scgi_process_header(ngx_http_request_t *r)
 
             if (u->headers_in.status) {
                 status_line = &u->headers_in.status->value;
+                status = NGX_OK;
 
-                status = ngx_atoi(status_line->data, 3);
-                if (status == NGX_ERROR) {
+                if (status_line->len < 3) {
+                    status = NGX_ERROR;
+                } else if (status_line->len > 3) {
+                    if (status_line->data[3] != ' ') {
+                        status = NGX_ERROR;
+                    }
+
+                    for (i = 4; i < status_line->len; ++i) {
+                        ch = status_line->data[i];
+                        if (ch < ' ' ? ch != '\t' : ch == 0x7F) {
+                            status = NGX_ERROR;
+                        }
+                    }
+                }
+
+                if (status == NGX_OK) {
+                    status = ngx_atoi(status_line->data, 3);
+                }
+
+                if (status < 100 || status > 999) {
                     ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-                                  "upstream sent invalid status \"%V\"",
+                                  "SCGI upstream sent invalid status \"%V\"",
                                   status_line);
                     return NGX_HTTP_UPSTREAM_INVALID_HEADER;
                 }
@@ -1183,9 +1204,29 @@ ngx_http_scgi_process_header(ngx_http_request_t *r)
 
         done:
 
-            if (u->headers_in.status_n == NGX_HTTP_SWITCHING_PROTOCOLS
-                && r->headers_in.upgrade)
-            {
+            if (u->headers_in.status_n < NGX_HTTP_OK) {
+                if (u->headers_in.status_n != NGX_HTTP_SWITCHING_PROTOCOLS) {
+                    ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+                                  "SCGI doesn't support 1xx responses "
+                                  " other than 101, but got status %ui",
+                                  u->headers_in.status_n);
+                    return NGX_HTTP_UPSTREAM_INVALID_HEADER;
+                }
+
+                if (!r->headers_in.upgrade) {
+                    ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+                                  "upstream sent 101 Switching Protocols, "
+                                  "but client didn't send Upgrade header");
+                    return NGX_HTTP_UPSTREAM_INVALID_HEADER;
+                }
+
+                if (!u->headers_in.upgrade) {
+                    ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+                                  "upstream sent 101 Switching Protocols "
+                                  "response without Upgrade header");
+                    return NGX_HTTP_UPSTREAM_INVALID_HEADER;
+                }
+
                 u->upgrade = 1;
             }
 
