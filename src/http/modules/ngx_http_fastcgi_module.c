@@ -1690,7 +1690,7 @@ static ngx_int_t
 ngx_http_fastcgi_process_header(ngx_http_request_t *r)
 {
     u_char                         *p, *msg, *start, *last,
-                                   *part_start, *part_end;
+                                   *part_start, *part_end, ch;
     size_t                          size;
     ngx_str_t                      *status_line, *pattern;
     ngx_int_t                       rc, status;
@@ -2046,12 +2046,37 @@ ngx_http_fastcgi_process_header(ngx_http_request_t *r)
 
                 if (u->headers_in.status) {
                     status_line = &u->headers_in.status->value;
+                    status = NGX_OK;
 
-                    status = ngx_atoi(status_line->data, 3);
+                    if (status_line->len < 3) {
+                        status = NGX_ERROR;
+                    } else if (status_line->len > 3) {
+                        if (status_line->data[3] != ' ') {
+                            status = NGX_ERROR;
+                        }
 
-                    if (status == NGX_ERROR) {
+                        for (i = 4; i < status_line->len; ++i) {
+                            ch = status_line->data[i];
+                            if (ch < ' ' ? ch != '\t' : ch == 0x7F) {
+                                status = NGX_ERROR;
+                            }
+                        }
+                    }
+
+                    if (status == NGX_OK) {
+                        status = ngx_atoi(status_line->data, 3);
+                    }
+
+                    if (status < 100 || status > 999) {
                         ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-                                      "upstream sent invalid status \"%V\"",
+                                      "FastCGI upstream sent invalid status \"%V\"",
+                                      status_line);
+                        return NGX_HTTP_UPSTREAM_INVALID_HEADER;
+                    }
+
+                    if (status < NGX_HTTP_OK) {
+                        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+                                      "FastCGI upstream sent 1xx status \"%V\"",
                                       status_line);
                         return NGX_HTTP_UPSTREAM_INVALID_HEADER;
                     }
