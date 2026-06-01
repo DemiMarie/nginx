@@ -1510,7 +1510,9 @@ ngx_http_proxy_v2_process_header(ngx_http_request_t *r)
                         return NGX_HTTP_UPSTREAM_INVALID_HEADER;
                     }
 
-                    if (status < 100 || status == NGX_HTTP_SWITCHING_PROTOCOLS)
+                    if (status < 100
+                        || status == NGX_HTTP_SWITCHING_PROTOCOLS
+                        || status > 599)
                     {
                         ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
                                       "upstream sent unexpected :status \"%V\"",
