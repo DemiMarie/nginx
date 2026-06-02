@@ -680,13 +680,6 @@ ngx_http_parse_request_line(ngx_http_request_t *r, ngx_buf_t *b)
             switch (ch) {
             case ' ':
                 break;
-            case CR:
-                r->http_minor = 9;
-                state = sw_almost_done;
-                break;
-            case LF:
-                r->http_minor = 9;
-                goto done;
             case 'H':
                 r->http_protocol.data = p;
                 state = sw_http_H;
@@ -746,22 +739,22 @@ ngx_http_parse_request_line(ngx_http_request_t *r, ngx_buf_t *b)
             }
             break;
 
-        /* first digit of major HTTP version */
+        /* major HTTP version */
         case sw_first_major_digit:
-            if (ch < '1' || ch > '9') {
+            if (ch < '0' || ch > '9') {
                 return NGX_HTTP_PARSE_INVALID_REQUEST;
             }
 
             r->http_major = ch - '0';
 
-            if (r->http_major > 1) {
+            if (r->http_major != 1) {
                 return NGX_HTTP_PARSE_INVALID_VERSION;
             }
 
             state = sw_major_digit;
             break;
 
-        /* major HTTP version or dot */
+        /* dot */
         case sw_major_digit:
             if (ch == '.') {
                 state = sw_first_minor_digit;
@@ -774,19 +767,20 @@ ngx_http_parse_request_line(ngx_http_request_t *r, ngx_buf_t *b)
 
             r->http_major = r->http_major * 10 + (ch - '0');
 
-            if (r->http_major > 1) {
-                return NGX_HTTP_PARSE_INVALID_VERSION;
-            }
+            return NGX_HTTP_PARSE_INVALID_VERSION;
 
-            break;
-
-        /* first digit of minor HTTP version */
+        /* minor HTTP version */
         case sw_first_minor_digit:
             if (ch < '0' || ch > '9') {
                 return NGX_HTTP_PARSE_INVALID_REQUEST;
             }
 
             r->http_minor = ch - '0';
+
+            if (r->http_minor > 1) {
+                return NGX_HTTP_PARSE_INVALID_VERSION;
+            }
+
             state = sw_minor_digit;
             break;
 
@@ -806,16 +800,11 @@ ngx_http_parse_request_line(ngx_http_request_t *r, ngx_buf_t *b)
                 break;
             }
 
-            if (ch < '0' || ch > '9') {
+            if (ch < '0' || ch > '9' || r->http_minor == 0) {
                 return NGX_HTTP_PARSE_INVALID_REQUEST;
             }
 
-            if (r->http_minor > 99) {
-                return NGX_HTTP_PARSE_INVALID_REQUEST;
-            }
-
-            r->http_minor = r->http_minor * 10 + (ch - '0');
-            break;
+            return NGX_HTTP_PARSE_INVALID_VERSION;
 
         case sw_spaces_after_digit:
             switch (ch) {
