@@ -1673,10 +1673,10 @@ ngx_http_parse_status_line(ngx_http_request_t *r, ngx_buf_t *b,
         sw_HT,
         sw_HTT,
         sw_HTTP,
-        sw_first_major_digit,
         sw_major_digit,
-        sw_first_minor_digit,
+        sw_dot,
         sw_minor_digit,
+        sw_space_after_version,
         sw_status,
         sw_space_after_status,
         sw_status_text,
@@ -1736,7 +1736,7 @@ ngx_http_parse_status_line(ngx_http_request_t *r, ngx_buf_t *b,
         case sw_HTTP:
             switch (ch) {
             case '/':
-                state = sw_first_major_digit;
+                state = sw_major_digit;
                 break;
             default:
                 return NGX_ERROR;
@@ -1744,59 +1744,41 @@ ngx_http_parse_status_line(ngx_http_request_t *r, ngx_buf_t *b,
             break;
 
         /* the first digit of major HTTP version */
-        case sw_first_major_digit:
-            if (ch < '1' || ch > '9') {
+        case sw_major_digit:
+            if (ch != '1') {
                 return NGX_ERROR;
             }
 
-            r->http_major = ch - '0';
-            state = sw_major_digit;
+            r->http_major = 1;
+            state = sw_dot;
             break;
 
         /* the major HTTP version or dot */
-        case sw_major_digit:
-            if (ch == '.') {
-                state = sw_first_minor_digit;
-                break;
-            }
-
-            if (ch < '0' || ch > '9') {
+        case sw_dot:
+            if (ch != '.') {
                 return NGX_ERROR;
             }
 
-            if (r->http_major > 99) {
-                return NGX_ERROR;
-            }
-
-            r->http_major = r->http_major * 10 + (ch - '0');
+            state = sw_minor_digit;
             break;
 
         /* the first digit of minor HTTP version */
-        case sw_first_minor_digit:
-            if (ch < '0' || ch > '9') {
+        case sw_minor_digit:
+            if (ch < '0' || ch > '1') {
                 return NGX_ERROR;
             }
 
             r->http_minor = ch - '0';
-            state = sw_minor_digit;
+            state = sw_space_after_version;
             break;
 
         /* the minor HTTP version or the end of the request line */
-        case sw_minor_digit:
-            if (ch == ' ') {
-                state = sw_status;
-                break;
-            }
-
-            if (ch < '0' || ch > '9') {
+        case sw_space_after_version:
+            if (ch != ' ') {
                 return NGX_ERROR;
             }
 
-            if (r->http_minor > 99) {
-                return NGX_ERROR;
-            }
-
-            r->http_minor = r->http_minor * 10 + (ch - '0');
+            state = sw_status;
             break;
 
         /* HTTP status code */
