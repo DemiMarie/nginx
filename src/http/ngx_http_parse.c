@@ -1781,10 +1781,17 @@ ngx_http_parse_status_line(ngx_http_request_t *r, ngx_buf_t *b,
             state = sw_status;
             break;
 
-        /* HTTP status code */
+        /* HTTP status code or space before it. */
         case sw_status:
-            if (ch == ' ') {
-                break;
+            if (status->count == 0) {
+                if (ch == ' ') {
+                    break;
+                }
+
+                /* status code cannot start with 0 */
+                if (ch == '0') {
+                    return NGX_ERROR;
+                }
             }
 
             if (ch < '0' || ch > '9') {
@@ -1810,9 +1817,6 @@ ngx_http_parse_status_line(ngx_http_request_t *r, ngx_buf_t *b,
             case ' ':
                 state = sw_status_text;
                 break;
-            case '.':                    /* IIS may send 403.1, 403.2, etc */
-                state = sw_status_text;
-                break;
             case CR:
                 state = sw_almost_done;
                 break;
@@ -1832,6 +1836,10 @@ ngx_http_parse_status_line(ngx_http_request_t *r, ngx_buf_t *b,
                 break;
             case LF:
                 goto done;
+            case '\0':
+                return NGX_ERROR;
+            default:
+                break;
             }
             break;
 
