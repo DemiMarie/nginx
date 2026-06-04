@@ -1798,6 +1798,13 @@ ngx_http_proxy_process_status_line(ngx_http_request_t *r)
             return NGX_HTTP_UPSTREAM_INVALID_HEADER;
         }
 
+        if (u->headers_in.upgrade)  {
+            ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+                          "upstream sent HTTP/1.0 response "
+                          "with Upgrade header");
+            return NGX_HTTP_UPSTREAM_INVALID_HEADER;
+        }
+
         u->headers_in.connection_close = 1;
     }
 
