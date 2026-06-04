@@ -1946,9 +1946,17 @@ ngx_http_proxy_process_header(ngx_http_request_t *r)
                 h->next = NULL;
             }
 
-            /* clear content length if response is chunked */
+            if (u->headers_in.status_n == NGX_HTTP_SWITCHING_PROTOCOLS)
+            {
+                u->upgrade = 1;
+                u->keepalive = 0;
+                /* These responses never have a body. */
+                u->headers_in.chunked = 0;
+                u->headers_in.content_length_n = -1;
+                return NGX_OK;
+            }
 
-            u = r->upstream;
+            /* clear content length if response is chunked */
 
             if (u->headers_in.chunked) {
                 u->headers_in.content_length_n = -1;
@@ -1966,14 +1974,6 @@ ngx_http_proxy_process_header(ngx_http_request_t *r)
                     && u->headers_in.content_length_n == 0))
             {
                 u->keepalive = !u->headers_in.connection_close;
-            }
-
-            if (u->headers_in.status_n == NGX_HTTP_SWITCHING_PROTOCOLS) {
-                u->keepalive = 0;
-
-                if (r->headers_in.upgrade) {
-                    u->upgrade = 1;
-                }
             }
 
             return NGX_OK;
