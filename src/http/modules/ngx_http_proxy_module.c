@@ -1955,6 +1955,13 @@ ngx_http_proxy_process_header(ngx_http_request_t *r)
 
             if (u->headers_in.status_n == NGX_HTTP_SWITCHING_PROTOCOLS)
             {
+                if (!u->headers_in.upgrade) {
+                    ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+                                  "upstream sent 101 Switching Protocols "
+                                  "response without Upgrade header");
+                    return NGX_HTTP_UPSTREAM_INVALID_HEADER;
+                }
+
                 u->upgrade = 1;
                 u->keepalive = 0;
                 /* These responses never have a body. */
