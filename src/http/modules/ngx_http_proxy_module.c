@@ -1838,14 +1838,15 @@ ngx_http_proxy_process_header(ngx_http_request_t *r)
     umcf = ngx_http_get_module_main_conf(r, ngx_http_upstream_module);
 
     for ( ;; ) {
+        u = r->upstream;
 
-        rc = ngx_http_parse_header_line(r, &r->upstream->buffer, 1);
+        rc = ngx_http_parse_header_line(r, &u->buffer, 1);
 
         if (rc == NGX_OK) {
 
             /* a header line has been parsed successfully */
 
-            h = ngx_list_push(&r->upstream->headers_in.headers);
+            h = ngx_list_push(&u->headers_in.headers);
             if (h == NULL) {
                 return NGX_ERROR;
             }
@@ -1881,7 +1882,9 @@ ngx_http_proxy_process_header(ngx_http_request_t *r)
                            "http proxy header: \"%V: %V\"",
                            &h->key, &h->value);
 
-            if (r->upstream->headers_in.status_n == NGX_HTTP_EARLY_HINTS) {
+            if (u->headers_in.status_n < NGX_HTTP_OK
+                && u->headers_in.status_n != NGX_HTTP_SWITCHING_PROTOCOLS)
+            {
                 continue;
             }
 
@@ -1908,14 +1911,19 @@ ngx_http_proxy_process_header(ngx_http_request_t *r)
 
             ctx = ngx_http_get_module_ctx(r, ngx_http_proxy_module);
 
-            if (r->upstream->headers_in.status_n == NGX_HTTP_EARLY_HINTS) {
+            if (u->headers_in.status_n < NGX_HTTP_OK
+                && u->headers_in.status_n != NGX_HTTP_SWITCHING_PROTOCOLS)
+            {
+                /* These responses never have a body. */
+                u->headers_in.chunked = 0;
+                u->headers_in.content_length_n = -1;
+
                 ctx->status.code = 0;
                 ctx->status.count = 0;
                 ctx->status.start = NULL;
                 ctx->status.end = NULL;
 
-                r->upstream->process_header =
-                                            ngx_http_proxy_process_status_line;
+                u->process_header = ngx_http_proxy_process_status_line;
                 r->state = 0;
                 return NGX_HTTP_UPSTREAM_EARLY_HINTS;
             }
