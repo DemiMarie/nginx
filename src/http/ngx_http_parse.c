@@ -441,13 +441,11 @@ ngx_http_parse_request_line(ngx_http_request_t *r, ngx_buf_t *b)
             break;
 
         case sw_host_ip_literal:
-
             if (ch >= '0' && ch <= '9') {
                 break;
             }
-
             c = (u_char) (ch | 0x20);
-            if (c >= 'a' && c <= 'z') {
+            if (c >= 'a' && c <= 'f') {
                 break;
             }
 

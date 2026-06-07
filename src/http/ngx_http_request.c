@@ -2319,12 +2319,12 @@ ngx_http_validate_host(ngx_str_t *host, in_port_t *portp, ngx_pool_t *pool,
 
         case sw_host_ip_literal:
 
-            if (ch >= 'A' && ch <= 'Z') {
+            if (ch >= 'A' && ch <= 'F') {
                 alloc = 1;
                 break;
             }
 
-            if (ch >= 'a' && ch <= 'z') {
+            if (ch >= 'a' && ch <= 'f') {
                 break;
             }
 
@@ -2339,30 +2339,11 @@ ngx_http_validate_host(ngx_str_t *host, in_port_t *portp, ngx_pool_t *pool,
                 host_len = i + 1;
                 state = sw_host_end;
                 break;
-            case '-':
-                break;
             case '.':
                 if (dot_pos == i - 1) {
                     return NGX_DECLINED;
                 }
                 dot_pos = i;
-                break;
-            case '_':
-            case '~':
-                /* unreserved */
-                break;
-            case '!':
-            case '$':
-            case '&':
-            case '\'':
-            case '(':
-            case ')':
-            case '*':
-            case '+':
-            case ',':
-            case ';':
-            case '=':
-                /* sub-delims */
                 break;
             default:
                 return NGX_DECLINED;
