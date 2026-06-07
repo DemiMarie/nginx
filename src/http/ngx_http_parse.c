@@ -1681,18 +1681,14 @@ ngx_http_parse_status_line(ngx_http_request_t *r, ngx_buf_t *b,
         /* HTTP status code or space before it. */
         case sw_status:
             if (status->count == 0) {
-                if (ch == ' ') {
-                    break;
-                }
-
                 /* status code cannot start with 0 */
-                if (ch == '0') {
+                if (ch < '1' || ch > '5') {
                     return NGX_ERROR;
                 }
-            }
-
-            if (ch < '0' || ch > '9') {
-                return NGX_ERROR;
+            } else {
+                if (ch < '0' || ch > '9') {
+                    return NGX_ERROR;
+                }
             }
 
             status->code = status->code * 10 + (ch - '0');
@@ -1714,11 +1710,6 @@ ngx_http_parse_status_line(ngx_http_request_t *r, ngx_buf_t *b,
             case ' ':
                 state = sw_status_text;
                 break;
-            case CR:
-                state = sw_almost_done;
-                break;
-            case LF:
-                goto done;
             default:
                 return NGX_ERROR;
             }
