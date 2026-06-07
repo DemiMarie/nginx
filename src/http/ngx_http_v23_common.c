@@ -50,8 +50,8 @@ ngx_http_v23_validate_header(ngx_http_request_t *r,
             || (ch >= 'A' && ch <= 'Z'))
         {
             ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
-                          "%s sent invalid header name: \"%V\"",
-                          is_client ? "client" : "upstream", name);
+                          "%s sent field with invalid character %ui in name",
+                          is_client ? "client" : "upstream", (ngx_uint_t)ch);
 
             return NGX_ERROR;
         }
@@ -72,9 +72,9 @@ ngx_http_v23_validate_header(ngx_http_request_t *r,
         if (ch == '\0' || ch == LF || ch == CR) {
             ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
                           "%s sent header \"%V\" with "
-                          "invalid value: \"%V\"",
+                          "invalid character %ui in value",
                           is_client ? "client" : "upstream",
-                          name, value);
+                          name, (ngx_uint_t)ch);
 
             return NGX_ERROR;
         }
@@ -90,8 +90,8 @@ ngx_http_v23_validate_header(ngx_http_request_t *r,
                   : cscf->reject_leading_trailing_whitespace_upstream) {
         ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
                       "%s sent header \"%V\" with "
-                      "leading or trailing space",
-                      is_client ? "client" : "upstream", name);
+                      "leading or trailing space in value \"%V\"",
+                      is_client ? "client" : "upstream", name, value);
 
         return NGX_ERROR;
     }
