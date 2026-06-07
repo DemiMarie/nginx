@@ -37,6 +37,12 @@ typedef struct {
 } ngx_variable_value_t;
 
 
+typedef struct {
+    u_char     *_cursor;
+    u_char     *_end;
+} ngx_delim_iterator_t;
+
+
 #define ngx_string(str)     { sizeof(str) - 1, (u_char *) str }
 #define ngx_null_string     { 0, NULL }
 #define ngx_str_set(str, text)                                               \
@@ -78,6 +84,28 @@ ngx_strlchr(u_char *p, u_char *last, u_char c)
 
     return NULL;
 }
+
+
+static ngx_inline ngx_int_t
+ngx_str_is_lws(u_char c)
+{
+    return c == ' ' || c == '\t';
+}
+
+
+static ngx_inline ngx_delim_iterator_t
+ngx_delim_iterator_init(const ngx_str_t *s)
+{
+    ngx_delim_iterator_t    iter;
+    
+    iter._cursor = s->data;
+    iter._end    = s->data + s->len;
+    return iter;
+}
+
+
+ngx_int_t ngx_delim_iterator_next(ngx_delim_iterator_t *iter, u_char delim,
+                                  ngx_int_t strict, ngx_str_t *out);
 
 
 /*

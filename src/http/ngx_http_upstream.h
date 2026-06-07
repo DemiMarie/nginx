@@ -59,6 +59,12 @@
 
 #define NGX_HTTP_UPSTREAM_NOTIFY_HEADER      0x1
 
+enum {
+    NGX_HTTP_UPSTREAM_VERSION_10    = 0,
+    NGX_HTTP_UPSTREAM_VERSION_11    = 1,
+    NGX_HTTP_UPSTREAM_VERSION_20    = 2,
+    NGX_HTTP_UPSTREAM_VERSION_30    = 3,
+};
 
 typedef struct {
     ngx_uint_t                       status;
@@ -312,6 +318,8 @@ typedef struct {
     unsigned                         no_cache:1;
     unsigned                         expired:1;
     unsigned                         upgrade:1;
+    unsigned                         connection_upgrade:1;
+    unsigned                         version:2;
 } ngx_http_upstream_headers_in_t;
 
 

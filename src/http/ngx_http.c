@@ -2171,6 +2171,121 @@ ngx_http_merge_types(ngx_conf_t *cf, ngx_array_t **keys, ngx_hash_t *types_hash,
 
 
 ngx_int_t
+ngx_http_is_token(const ngx_str_t *value)
+{
+    size_t  iter;
+    u_char  c;
+
+    if (value->len < 1) {
+        return NGX_ERROR;
+    }
+
+    for (iter = 0; iter < value->len; iter++) {
+        c = value->data[iter];
+
+        if (c == '!'
+            || (c >= '#' && c <= '\'')
+            || c == '*' || c == '+'
+            || c == '-' || c == '.'
+            || (c >= '0' && c <= '9')
+            || (c >= 'A' && c <= 'Z')
+            || (c >= '^' && c <= 'z'))
+        {
+            continue;
+        }
+
+        return NGX_ERROR;
+    }
+        
+    return NGX_OK;
+}
+
+
+ngx_int_t
+ngx_http_parse_connection_header(const ngx_str_t *value)
+{
+    ngx_int_t              status, result;
+    ngx_str_t              header_name;
+    ngx_delim_iterator_t   iter;
+
+    result = 0;
+    iter   = ngx_delim_iterator_init(value);
+
+    for (;;) {
+        status = ngx_delim_iterator_next(&iter, ',', 0, &header_name);
+        if (status == NGX_DONE) {
+            break;
+        }
+
+        if (status != NGX_OK) {
+            return NGX_ERROR;
+        }
+
+        switch (header_name.len) {
+        case 5:
+            if (ngx_strncasecmp(header_name.data, (u_char *) "close", 5) == 0) {
+                result |= ngx_connection_has_close;
+                continue;
+            }
+            break;
+        case 14:
+            if (ngx_strncasecmp(header_name.data,
+                                (u_char *) "content-length", 14) == 0)
+            {
+                return NGX_ERROR;
+            }
+            break;
+        case 17:
+            if (ngx_strncasecmp(header_name.data,
+                                (u_char *) "transfer-encoding", 17) == 0)
+            {
+                return NGX_ERROR;
+            }
+            break;
+        case 7:
+            if (ngx_strncasecmp(header_name.data,
+                                (u_char *) "upgrade", 7) == 0)
+            {
+                result |= ngx_connection_has_upgrade;
+                continue;
+            }
+            break;
+        default:
+            break;
+        }
+
+        if (ngx_http_is_token(&header_name) != NGX_OK) {
+            return NGX_ERROR;
+        }
+    }
+
+    return result;
+}
+
+
+ngx_int_t
+ngx_http_check_token_list(ngx_str_t *value)
+{
+    ngx_int_t              status;
+    ngx_str_t              header_name;
+    ngx_delim_iterator_t   iter;
+
+    iter   = ngx_delim_iterator_init(value);
+
+    for (;;) {
+        status = ngx_delim_iterator_next(&iter, ',', 0, &header_name);
+        if (status == NGX_DONE) {
+            return NGX_OK;
+        }
+
+        if (status != NGX_OK || ngx_http_is_token(&header_name) != NGX_OK) {
+            return NGX_ERROR;
+        }
+    }
+}
+
+
+ngx_int_t
 ngx_http_set_default_types(ngx_conf_t *cf, ngx_array_t **types,
     ngx_str_t *default_type)
 {

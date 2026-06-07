@@ -78,6 +78,12 @@ typedef struct {
 } ngx_http_status_t;
 
 
+enum ngx_http_connection_header_result {
+    ngx_connection_has_close        = 1,
+    ngx_connection_has_upgrade      = 2,
+};
+
+
 #define ngx_http_get_module_ctx(r, module)  (r)->ctx[module.ctx_index]
 #define ngx_http_set_ctx(r, c, module)      r->ctx[module.ctx_index] = c;
 
@@ -142,6 +148,7 @@ void ngx_http_free_request(ngx_http_request_t *r, ngx_int_t rc);
 void ngx_http_empty_handler(ngx_event_t *wev);
 void ngx_http_request_empty_handler(ngx_http_request_t *r);
 
+ngx_int_t ngx_http_check_token_list(ngx_str_t *value);
 
 #define NGX_HTTP_LAST   1
 #define NGX_HTTP_FLUSH  2
@@ -160,6 +167,7 @@ ngx_int_t ngx_http_special_response_handler(ngx_http_request_t *r,
 ngx_int_t ngx_http_filter_finalize_request(ngx_http_request_t *r,
     ngx_module_t *m, ngx_int_t error);
 void ngx_http_clean_header(ngx_http_request_t *r);
+ngx_int_t ngx_http_is_token(const ngx_str_t *value);
 
 
 ngx_int_t ngx_http_discard_request_body(ngx_http_request_t *r);
@@ -174,6 +182,8 @@ char *ngx_http_merge_types(ngx_conf_t *cf, ngx_array_t **keys,
     ngx_hash_t *prev_types_hash, ngx_str_t *default_types);
 ngx_int_t ngx_http_set_default_types(ngx_conf_t *cf, ngx_array_t **types,
     ngx_str_t *default_type);
+
+ngx_int_t ngx_http_parse_connection_header(const ngx_str_t *value);
 
 #if (NGX_HTTP_DEGRADATION)
 ngx_uint_t  ngx_http_degraded(ngx_http_request_t *);

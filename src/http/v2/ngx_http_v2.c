@@ -3085,7 +3085,7 @@ ngx_http_v2_create_stream(ngx_http_v2_connection_t *h2c)
         return NULL;
     }
 
-    r->headers_in.connection_type = NGX_HTTP_CONNECTION_CLOSE;
+    r->headers_in.connection_close = 1;
 
     stream = ngx_pcalloc(r->pool, sizeof(ngx_http_v2_stream_t));
     if (stream == NULL) {

@@ -245,7 +245,7 @@ typedef struct {
     off_t                             content_length_n;
     time_t                            keep_alive_n;
 
-    unsigned                          connection_type:2;
+    unsigned                          connection_close:1;
     unsigned                          chunked:1;
     unsigned                          multi:1;
     unsigned                          multi_linked:1;
@@ -256,6 +256,7 @@ typedef struct {
     unsigned                          chrome:1;
     unsigned                          safari:1;
     unsigned                          konqueror:1;
+    unsigned                          connection_upgrade:1;
 } ngx_http_headers_in_t;
 
 

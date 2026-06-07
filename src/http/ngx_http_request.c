@@ -1918,15 +1918,33 @@ static ngx_int_t
 ngx_http_process_connection(ngx_http_request_t *r, ngx_table_elt_t *h,
     ngx_uint_t offset)
 {
+    ngx_int_t   status;
+
+    if (r->http_version > NGX_HTTP_VERSION_11) {
+        ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
+                      "client sent \"Connection\" header");
+        ngx_http_finalize_request(r, NGX_HTTP_BAD_REQUEST);
+        return NGX_ERROR;
+    }
+
     if (ngx_http_process_header_line(r, h, offset) != NGX_OK) {
         return NGX_ERROR;
     }
 
-    if (ngx_strcasestrn(h->value.data, "close", 5 - 1)) {
-        r->headers_in.connection_type = NGX_HTTP_CONNECTION_CLOSE;
+    status = ngx_http_parse_connection_header(&h->value);
+    if (status < 0 || status > 3) {
+        ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
+                      "client sent invalid \"Connection\" header: \"%V\"",
+                      &h->value);
+        return NGX_ERROR;
+    }
 
-    } else if (ngx_strcasestrn(h->value.data, "keep-alive", 10 - 1)) {
-        r->headers_in.connection_type = NGX_HTTP_CONNECTION_KEEP_ALIVE;
+    if (status & ngx_connection_has_close) {
+        r->headers_in.connection_close = 1;
+    }
+
+    if (status & ngx_connection_has_upgrade) {
+        r->headers_in.connection_upgrade = 1;
     }
 
     return NGX_OK;
@@ -2100,9 +2118,18 @@ ngx_http_process_request_header(ngx_http_request_t *r)
             ngx_http_finalize_request(r, NGX_HTTP_BAD_REQUEST);
             return NGX_ERROR;
         }
+
+        if (!r->headers_in.connection_upgrade)
+        {
+            ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
+                          "client sent request with \"Upgrade\" header, "
+                          "but not \"Connection: Upgrade\"");
+            ngx_http_finalize_request(r, NGX_HTTP_BAD_REQUEST);
+            return NGX_ERROR;
+        }
     }
 
-    if (r->headers_in.connection_type == NGX_HTTP_CONNECTION_KEEP_ALIVE) {
+    if (!r->headers_in.connection_close) {
         if (r->headers_in.keep_alive) {
             r->headers_in.keep_alive_n =
                             ngx_atotm(r->headers_in.keep_alive->value.data,

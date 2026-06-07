@@ -1329,7 +1329,6 @@ ngx_http_upstream_handler(ngx_event_t *ev)
 
     if (ev->write) {
         u->write_event_handler(r, u);
-
     } else {
         u->read_event_handler(r, u);
     }
@@ -3706,8 +3705,6 @@ ngx_http_upstream_upgrade(ngx_http_request_t *r, ngx_http_upstream_t *u)
     c = r->connection;
     clcf = ngx_http_get_module_loc_conf(r, ngx_http_core_module);
 
-    /* TODO: prevent upgrade if not requested or not possible */
-
     if (r != r->main) {
         ngx_log_error(NGX_LOG_ERR, c->log, 0,
                       "connection upgrade in subrequest");
@@ -5615,11 +5612,50 @@ ngx_http_upstream_process_transfer_encoding(ngx_http_request_t *r,
 
 
 static ngx_int_t
+ngx_http_parse_vary_header(const ngx_str_t *value)
+{
+    ngx_int_t              status, result;
+    ngx_str_t              header_name;
+    ngx_delim_iterator_t   iter;
+
+    result = 0;
+    iter   = ngx_delim_iterator_init(value);
+
+    for (;;) {
+        status = ngx_delim_iterator_next(&iter, ',', 0, &header_name);
+        if (status == NGX_DONE) {
+            break;
+        }
+
+        if (status != NGX_OK) {
+            return NGX_ERROR;
+        }
+
+        if (header_name.len == 1 && header_name.data[0] == '*') {
+            result = 1;
+        }
+
+        if (ngx_http_is_token(&header_name) != NGX_OK) {
+            return NGX_ERROR;
+        }
+    }
+
+    return result;
+}
+
+
+static ngx_int_t
 ngx_http_upstream_process_vary(ngx_http_request_t *r,
     ngx_table_elt_t *h, ngx_uint_t offset)
 {
+    ngx_int_t              vary_parse_status;
     ngx_table_elt_t      **ph;
     ngx_http_upstream_t   *u;
+
+    vary_parse_status = ngx_http_parse_vary_header(&h->value);
+    if (vary_parse_status < 0 || vary_parse_status > 1) {
+        return NGX_ERROR;
+    }
 
     u = r->upstream;
     ph = &u->headers_in.vary;
@@ -5643,7 +5679,7 @@ ngx_http_upstream_process_vary(ngx_http_request_t *r,
         return NGX_OK;
     }
 
-    if (h->value.len == 1 && h->value.data[0] == '*') {
+    if (vary_parse_status) {
         u->cacheable = 0;
         return NGX_OK;
     }

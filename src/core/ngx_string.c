@@ -2125,6 +2125,62 @@ ngx_sort(void *base, size_t n, size_t size,
 }
 
 
+ngx_int_t
+ngx_delim_iterator_next(ngx_delim_iterator_t *iter, u_char delim,
+                        ngx_int_t strict, ngx_str_t *out)
+{
+    u_char *next, *p;
+
+    next = iter->_cursor;
+    for (;;next++) {
+        if (next >= iter->_end) {
+            iter->_cursor = iter->_end;
+            out->len = 0;
+            out->data = NULL;
+            return NGX_DONE;
+        }
+
+        if (*next == delim) {
+            if (strict) {
+                iter->_cursor = next;
+                out->len = 0;
+                out->data = NULL;
+                return NGX_ERROR;
+            }
+            continue;
+        }
+
+        if (ngx_str_is_lws(*next)) {
+            continue;
+        }
+
+        break;
+    }
+
+    /* iter->_cursor can't point to lws or delim here */
+    p = memchr(next, delim, (size_t)(iter->_end - iter->_cursor));
+    if (p == NULL) {
+        iter->_cursor = p = iter->_end;
+        /* p == iter->_end, which is greater than iter->_cursor */
+    } else {
+        iter->_cursor = p + 1;
+        /* *_s->cursor != delim, so p > _s->cursor */
+    }
+
+    /*
+     * p > next and *iter->_cursor is not lws, so it will
+     * stop the loop before it run offs the start of the string.
+     */
+    do {
+        p--;
+    } while (ngx_str_is_lws(*p));
+
+    out->len = (size_t)(p - next) + 1;
+    out->data = next;
+    return NGX_OK;
+}
+
+
 void
 ngx_explicit_memzero(void *buf, size_t n)
 {
