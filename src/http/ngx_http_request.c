@@ -30,6 +30,8 @@ static ngx_int_t ngx_http_process_proxy_connection(ngx_http_request_t *r,
     ngx_table_elt_t *h, ngx_uint_t offset);
 static ngx_int_t ngx_http_process_user_agent(ngx_http_request_t *r,
     ngx_table_elt_t *h, ngx_uint_t offset);
+static ngx_int_t ngx_http_process_token_list_header(ngx_http_request_t *r,
+    ngx_table_elt_t *h, ngx_uint_t offset);
 
 static ngx_int_t ngx_http_process_request_header(ngx_http_request_t *r);
 static ngx_int_t ngx_http_find_virtual_server(ngx_connection_t *c,
@@ -142,7 +144,7 @@ ngx_http_header_t  ngx_http_headers_in[] = {
 
     { ngx_string("Upgrade"),
                  offsetof(ngx_http_headers_in_t, upgrade),
-                 ngx_http_process_header_line },
+                 ngx_http_process_token_list_header },
 
 #if (NGX_HTTP_GZIP || NGX_HTTP_HEADERS)
     { ngx_string("Accept-Encoding"),
@@ -1913,6 +1915,21 @@ ngx_http_process_host(ngx_http_request_t *r, ngx_table_elt_t *h,
     return NGX_OK;
 }
 
+
+static ngx_int_t
+ngx_http_process_token_list_header(ngx_http_request_t *r, ngx_table_elt_t *h,
+    ngx_uint_t offset)
+{
+    if (ngx_http_check_token_list(&h->value) != NGX_OK) {
+        ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
+                      "Header \"%V\" has value that isn't "
+                      "valid token list: \"%V\"",
+                      &h->key, &h->value);
+        return NGX_ERROR;
+    }
+
+    return ngx_http_process_header_line(r, h, offset);
+}
 
 static ngx_int_t
 ngx_http_process_connection(ngx_http_request_t *r, ngx_table_elt_t *h,
