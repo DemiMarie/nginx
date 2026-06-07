@@ -37,27 +37,42 @@ ngx_http_v23_validate_header(ngx_http_request_t *r,
     for (i = (name->data[0] == ':'); i != name->len; i++) {
         ch = name->data[i];
 
-        if (is_client
-            && ((ch >= 'a' && ch <= 'z')
-                || (ch == '-')
-                || (ch >= '0' && ch <= '9')
-                || (ch == '_' && cscf->underscores_in_headers)))
+        if ((ch >= 'a' && ch <= 'z')
+            || (ch == '-')
+            || (ch >= '0' && ch <= '9'))
         {
             continue;
         }
 
-        if (ch <= 0x20 || ch == 0x7f || ch == ':'
-            || (ch >= 'A' && ch <= 'Z'))
-        {
+        switch (ch) {
+        case '_':
+            if (cscf->underscores_in_headers) {
+                break;
+            }
+            /* fall through */
+        case '!':
+        case '#':
+        case '$':
+        case '%':
+        case '&':
+        case '\'':
+        case '*':
+        case '+':
+        case '.':
+        case '^':
+        case '`':
+        case '|':
+        case '~':
+            if (is_client) {
+                r->invalid_header = 1;
+            }
+            break;
+        default:
             ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
                           "%s sent field with invalid character %ui in name",
                           is_client ? "client" : "upstream", (ngx_uint_t)ch);
 
             return NGX_ERROR;
-        }
-
-        if (is_client) {
-            r->invalid_header = 1;
         }
     }
 
