@@ -69,7 +69,7 @@ ngx_http_v23_validate_header(ngx_http_request_t *r,
     for (i = 0; i != value->len; i++) {
         ch = value->data[i];
 
-        if (ch == '\0' || ch == LF || ch == CR) {
+        if (ch < 0x20 ? ch != 0x09 : ch == 0x7F) {
             ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
                           "%s sent header \"%V\" with "
                           "invalid character %ui in value",
