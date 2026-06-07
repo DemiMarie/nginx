@@ -107,6 +107,18 @@ ngx_http_field_value_char(u_char ch)
     return ch >= 0x20 ? ch != 0x7f : ch == 0x09;
 }
 
+#define BAD_CHARS                                                       \
+            '#':                                                        \
+            case '"':                                                   \
+            case '<':                                                   \
+            case '>':                                                   \
+            case '\\':                                                  \
+            case '^':                                                   \
+            case '`':                                                   \
+            case '{':                                                   \
+            case '|':                                                   \
+            case '}'
+
 /* gcc, icc, msvc and others compile these switches as an jump table */
 
 ngx_int_t
@@ -135,11 +147,10 @@ ngx_http_parse_request_line(ngx_http_request_t *r, ngx_buf_t *b)
         sw_http_HT,
         sw_http_HTT,
         sw_http_HTTP,
-        sw_first_major_digit,
         sw_major_digit,
-        sw_first_minor_digit,
+        sw_dot,
         sw_minor_digit,
-        sw_spaces_after_digit,
+        sw_after_version,
         sw_almost_done
     } state;
 
@@ -442,28 +453,10 @@ ngx_http_parse_request_line(ngx_http_request_t *r, ngx_buf_t *b)
 
             switch (ch) {
             case ':':
+            case '.':
                 break;
             case ']':
                 state = sw_host_end;
-                break;
-            case '-':
-            case '.':
-            case '_':
-            case '~':
-                /* unreserved */
-                break;
-            case '!':
-            case '$':
-            case '&':
-            case '\'':
-            case '(':
-            case ')':
-            case '*':
-            case '+':
-            case ',':
-            case ';':
-            case '=':
-                /* sub-delims */
                 break;
             default:
                 return NGX_HTTP_PARSE_INVALID_REQUEST;
@@ -537,15 +530,6 @@ ngx_http_parse_request_line(ngx_http_request_t *r, ngx_buf_t *b)
                 r->uri_end = p;
                 state = sw_http_09;
                 break;
-            case CR:
-                r->uri_end = p;
-                r->http_minor = 9;
-                state = sw_almost_done;
-                break;
-            case LF:
-                r->uri_end = p;
-                r->http_minor = 9;
-                goto done;
             case '.':
                 r->complex_uri = 1;
                 state = sw_uri;
@@ -558,25 +542,17 @@ ngx_http_parse_request_line(ngx_http_request_t *r, ngx_buf_t *b)
                 r->complex_uri = 1;
                 state = sw_uri;
                 break;
-#if (NGX_WIN32)
-            case '\\':
-                r->complex_uri = 1;
-                state = sw_uri;
-                break;
-#endif
             case '?':
                 r->args_start = p + 1;
-                state = sw_uri;
-                break;
-            case '#':
-                r->complex_uri = 1;
                 state = sw_uri;
                 break;
             case '+':
                 r->plus_in_uri = 1;
                 break;
+            case BAD_CHARS:
+                return NGX_HTTP_PARSE_INVALID_REQUEST;
             default:
-                if (ch < 0x20 || ch == 0x7f) {
+                if (ch <= 0x20 || ch >= 0x7F) {
                     return NGX_HTTP_PARSE_INVALID_REQUEST;
                 }
                 state = sw_check_uri;
@@ -610,21 +586,6 @@ ngx_http_parse_request_line(ngx_http_request_t *r, ngx_buf_t *b)
                 r->uri_end = p;
                 state = sw_http_09;
                 break;
-            case CR:
-                r->uri_end = p;
-                r->http_minor = 9;
-                state = sw_almost_done;
-                break;
-            case LF:
-                r->uri_end = p;
-                r->http_minor = 9;
-                goto done;
-#if (NGX_WIN32)
-            case '\\':
-                r->complex_uri = 1;
-                state = sw_after_slash_in_uri;
-                break;
-#endif
             case '%':
                 r->quoted_uri = 1;
                 state = sw_uri;
@@ -633,15 +594,13 @@ ngx_http_parse_request_line(ngx_http_request_t *r, ngx_buf_t *b)
                 r->args_start = p + 1;
                 state = sw_uri;
                 break;
-            case '#':
-                r->complex_uri = 1;
-                state = sw_uri;
-                break;
             case '+':
                 r->plus_in_uri = 1;
                 break;
+            case BAD_CHARS:
+                return NGX_HTTP_PARSE_INVALID_REQUEST;
             default:
-                if (ch < 0x20 || ch == 0x7f) {
+                if (ch <= 0x20 || ch >= 0x7f) {
                     return NGX_HTTP_PARSE_INVALID_REQUEST;
                 }
                 break;
@@ -660,20 +619,10 @@ ngx_http_parse_request_line(ngx_http_request_t *r, ngx_buf_t *b)
                 r->uri_end = p;
                 state = sw_http_09;
                 break;
-            case CR:
-                r->uri_end = p;
-                r->http_minor = 9;
-                state = sw_almost_done;
-                break;
-            case LF:
-                r->uri_end = p;
-                r->http_minor = 9;
-                goto done;
-            case '#':
-                r->complex_uri = 1;
-                break;
+            case BAD_CHARS:
+                return NGX_HTTP_PARSE_INVALID_REQUEST;
             default:
-                if (ch < 0x20 || ch == 0x7f) {
+                if (ch <= 0x20 || ch >= 0x7f) {
                     return NGX_HTTP_PARSE_INVALID_REQUEST;
                 }
                 break;
@@ -737,7 +686,7 @@ ngx_http_parse_request_line(ngx_http_request_t *r, ngx_buf_t *b)
                     r->uri_end = p + 1;
                 }
 
-                state = sw_first_major_digit;
+                state = sw_major_digit;
                 break;
             default:
                 return NGX_HTTP_PARSE_INVALID_REQUEST;
@@ -745,52 +694,40 @@ ngx_http_parse_request_line(ngx_http_request_t *r, ngx_buf_t *b)
             break;
 
         /* major HTTP version */
-        case sw_first_major_digit:
-            if (ch < '0' || ch > '9') {
-                return NGX_HTTP_PARSE_INVALID_REQUEST;
-            }
-
-            r->http_major = ch - '0';
-
-            if (r->http_major != 1) {
+        case sw_major_digit:
+            if (ch != '1') {
+bad_version:
+                if (ch < '0' || ch > '9') {
+                    return NGX_HTTP_PARSE_INVALID_REQUEST;
+                }
                 return NGX_HTTP_PARSE_INVALID_VERSION;
             }
 
-            state = sw_major_digit;
+            r->http_major = 1;
+            state = sw_dot;
             break;
 
         /* dot */
-        case sw_major_digit:
-            if (ch == '.') {
-                state = sw_first_minor_digit;
-                break;
-            }
-
-            if (ch < '0' || ch > '9') {
-                return NGX_HTTP_PARSE_INVALID_REQUEST;
-            }
-
-            r->http_major = r->http_major * 10 + (ch - '0');
-
-            return NGX_HTTP_PARSE_INVALID_VERSION;
-
-        /* minor HTTP version */
-        case sw_first_minor_digit:
-            if (ch < '0' || ch > '9') {
-                return NGX_HTTP_PARSE_INVALID_REQUEST;
-            }
-
-            r->http_minor = ch - '0';
-
-            if (r->http_minor > 1) {
-                return NGX_HTTP_PARSE_INVALID_VERSION;
+        case sw_dot:
+            if (ch != '.') {
+                goto bad_version;
             }
 
             state = sw_minor_digit;
             break;
 
-        /* minor HTTP version or end of request line */
+        /* minor HTTP version */
         case sw_minor_digit:
+            if (ch != '0' && ch != '1') {
+                goto bad_version;
+            }
+
+            r->http_minor = ch - '0';
+            state = sw_after_version;
+            break;
+
+        /* minor HTTP version or end of request line */
+        case sw_after_version:
             if (ch == CR) {
                 state = sw_almost_done;
                 break;
@@ -801,29 +738,10 @@ ngx_http_parse_request_line(ngx_http_request_t *r, ngx_buf_t *b)
             }
 
             if (ch == ' ') {
-                state = sw_spaces_after_digit;
                 break;
             }
 
-            if (ch < '0' || ch > '9' || r->http_minor == 0) {
-                return NGX_HTTP_PARSE_INVALID_REQUEST;
-            }
-
-            return NGX_HTTP_PARSE_INVALID_VERSION;
-
-        case sw_spaces_after_digit:
-            switch (ch) {
-            case ' ':
-                break;
-            case CR:
-                state = sw_almost_done;
-                break;
-            case LF:
-                goto done;
-            default:
-                return NGX_HTTP_PARSE_INVALID_REQUEST;
-            }
-            break;
+            return NGX_HTTP_PARSE_INVALID_REQUEST;
 
         /* end of request line */
         case sw_almost_done:
@@ -1182,25 +1100,17 @@ ngx_http_parse_uri(ngx_http_request_t *r)
                 r->complex_uri = 1;
                 state = sw_uri;
                 break;
-#if (NGX_WIN32)
-            case '\\':
-                r->complex_uri = 1;
-                state = sw_uri;
-                break;
-#endif
             case '?':
                 r->args_start = p + 1;
-                state = sw_uri;
-                break;
-            case '#':
-                r->complex_uri = 1;
                 state = sw_uri;
                 break;
             case '+':
                 r->plus_in_uri = 1;
                 break;
+            case BAD_CHARS:
+                return NGX_ERROR;
             default:
-                if (ch <= 0x20 || ch == 0x7f) {
+                if (ch <= 0x20 || ch >= 0x7f) {
                     return NGX_ERROR;
                 }
                 state = sw_check_uri;
@@ -1230,12 +1140,6 @@ ngx_http_parse_uri(ngx_http_request_t *r)
             case '.':
                 r->uri_ext = p + 1;
                 break;
-#if (NGX_WIN32)
-            case '\\':
-                r->complex_uri = 1;
-                state = sw_after_slash_in_uri;
-                break;
-#endif
             case '%':
                 r->quoted_uri = 1;
                 state = sw_uri;
@@ -1244,15 +1148,12 @@ ngx_http_parse_uri(ngx_http_request_t *r)
                 r->args_start = p + 1;
                 state = sw_uri;
                 break;
-            case '#':
-                r->complex_uri = 1;
-                state = sw_uri;
-                break;
-            case '+':
                 r->plus_in_uri = 1;
                 break;
+            case BAD_CHARS:
+                return NGX_ERROR;
             default:
-                if (ch <= 0x20 || ch == 0x7f) {
+                if (ch <= 0x20 || ch >= 0x7f) {
                     return NGX_ERROR;
                 }
                 break;
@@ -1267,11 +1168,10 @@ ngx_http_parse_uri(ngx_http_request_t *r)
             }
 
             switch (ch) {
-            case '#':
-                r->complex_uri = 1;
-                break;
+            case BAD_CHARS:
+                return NGX_ERROR;
             default:
-                if (ch <= 0x20 || ch == 0x7f) {
+                if (ch <= 0x20 || ch >= 0x7f) {
                     return NGX_ERROR;
                 }
                 break;
