@@ -111,6 +111,8 @@ static ngx_int_t ngx_http_variable_request_id(ngx_http_request_t *r,
     ngx_http_variable_value_t *v, uintptr_t data);
 static ngx_int_t ngx_http_variable_status(ngx_http_request_t *r,
     ngx_http_variable_value_t *v, uintptr_t data);
+static ngx_int_t ngx_http_variable_upgrade(ngx_http_request_t *r,
+    ngx_http_variable_value_t *v, uintptr_t data);
 
 static ngx_int_t ngx_http_variable_sent_content_type(ngx_http_request_t *r,
     ngx_http_variable_value_t *v, uintptr_t data);
@@ -395,6 +397,9 @@ static ngx_http_variable_t  ngx_http_core_variables[] = {
 
     { ngx_string("http_"), NULL, ngx_http_variable_unknown_header_in,
       0, NGX_HTTP_VAR_PREFIX, 0 },
+
+    { ngx_string("http_upgrade"), NULL, ngx_http_variable_upgrade,
+      offsetof(ngx_http_request_t, headers_in.upgrade), 0, 0 },
 
     { ngx_string("sent_http_"), NULL, ngx_http_variable_unknown_header_out,
       0, NGX_HTTP_VAR_PREFIX, 0 },
@@ -830,6 +835,112 @@ ngx_http_variable_cookies(ngx_http_request_t *r,
     ngx_http_variable_value_t *v, uintptr_t data)
 {
     return ngx_http_variable_headers_internal(r, v, data, ';');
+}
+
+
+static size_t
+ngx_http_variable_upgrade_inner(ngx_table_elt_t *h, ngx_str_t *data, ngx_connection_t *c)
+{
+    size_t               tok_len, len;
+    u_char              *p, *end;
+    ngx_int_t            status;
+    ngx_str_t            header_name;
+    ngx_table_elt_t     *th;
+    ngx_delim_iterator_t iter;
+
+    len = 0;
+    end = p = NULL;
+
+    if (data != NULL) {
+        p   = data->data;
+        end = p + data->len;
+    }
+
+    for (th = h; th; th = th->next) {
+        if (th->hash == 0) {
+            continue;
+        }
+        iter = ngx_delim_iterator_init(&th->value);
+
+        while ((status = ngx_delim_iterator_next(&iter, ',', 0, &header_name)) != NGX_DONE) {
+            if (status != NGX_OK) {
+                /* not reached */
+                ngx_log_error(NGX_LOG_ALERT, c->log, 0, "bad iterator next retval");
+                ngx_abort();
+            }
+
+            tok_len = header_name.len;
+            if ((tok_len == 2 || tok_len == 3)
+                && (header_name.data[0] == 'h' && header_name.data[1] == '2'
+                    && (tok_len == 2 || header_name.data[2] == 'c')))
+            {
+                continue;
+            }
+
+            if (data) {
+                if ((ptrdiff_t)tok_len > end - p) {
+                    ngx_log_error(NGX_LOG_ALERT, c->log, 0, "header name would go past buffer end");
+                    ngx_abort();
+                }
+                p = ngx_copy(p, header_name.data, tok_len);
+                if (p == end) {
+                    return len + tok_len;
+                }
+                if (end - p < 2) {
+                    ngx_log_error(NGX_LOG_ALERT, c->log, 0, "\", \" would go past buffer end");
+                    ngx_abort();
+                }
+
+                *p++ = ',';
+                *p++ = ' ';
+            }
+
+            len += header_name.len + 2;
+        }
+    }
+
+    if (data) {
+        ngx_log_error(NGX_LOG_ALERT, c->log, 0, "didn't initialize whole buffer");
+        ngx_abort();
+    }
+    return len - 2;
+}
+
+
+static ngx_int_t
+ngx_http_variable_upgrade(ngx_http_request_t *r,
+    ngx_http_variable_value_t *v, uintptr_t data)
+{
+    ngx_str_t            tmp;
+    ngx_table_elt_t     *h;
+
+    h = *(ngx_table_elt_t **) ((char *) r + data);
+
+    tmp.len = ngx_http_variable_upgrade_inner(h, NULL, r->connection);
+
+    if (tmp.len == 0) {
+        v->not_found = 1;
+        return NGX_OK;
+    }
+
+    v->valid = 1;
+    v->no_cacheable = 0;
+    v->not_found = 0;
+
+    tmp.data = ngx_pnalloc(r->pool, tmp.len);
+    if (tmp.data == NULL) {
+        return NGX_ERROR;
+    }
+
+    if (ngx_http_variable_upgrade_inner(h, &tmp, r->connection) != tmp.len) {
+        ngx_log_error(NGX_LOG_ALERT, r->connection->log, 0, "ngx_http_variable_upgrade_inner() inconsistent");
+        ngx_abort();
+    }
+
+    v->len = tmp.len;
+    v->data = tmp.data;
+
+    return NGX_OK;
 }
 
 
